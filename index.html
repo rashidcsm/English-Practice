@@ -29,6 +29,8 @@
   .msg{padding:8px 12px;border-radius:10px;margin-bottom:6px;font-size:14px;line-height:1.5;white-space:pre-wrap;} .msg.user{background:#ede9fe;color:#4c1d95;text-align:right;} .msg.bot{background:#f1f5f9;color:#1e293b;}
   .chat-input{display:flex;gap:8px;} .chat-input input{flex:1;padding:10px;border:2px solid #ddd6fe;border-radius:10px;font-size:14px;outline:none;} .chat-input input:focus{border-color:#8b5cf6;}
   .chat-input button{flex:0 0 auto;background:#8b5cf6;color:#fff;min-width:auto;padding:10px 16px;}
+  .chat-input .mic-btn{background:#6366f1;color:#fff;min-width:auto;padding:10px 14px;font-size:18px;line-height:1;}
+  .chat-input .mic-btn.recording{background:#ef4444;animation:pulse 1s infinite;}
   .loading{display:inline-block;width:12px;height:12px;border:2px solid #c4b5fd;border-top-color:#8b5cf6;border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px;}
   @keyframes spin{to{transform:rotate(360deg);}}
 
@@ -83,12 +85,15 @@
     <button class="btn-ok" id="okBtn">✅ পরের বাক্য</button>
   </div>
   <div class="status" id="status"></div>
+  <div class="heard" id="heard"></div>
+</div>
 
 <div class="agent">
   <h2>🤖 এআই এজেন্ট</h2>
-  <div class="chat-box" id="chatBox"><div class="msg bot">হ্যালো! যেকোনো ইংরেজি শব্দের অর্থ ও বাংলা অনুবাদ জানতে প্রশ্ন করুন। উদাহরণ: "serendipity এর অর্থ কী?"</div></div>
+  <div class="chat-box" id="chatBox"><div class="msg bot">হ্যালো! যেকোনো ইংরেজি শব্দের অর্থ ও বাংলা অনুবাদ জানতে প্রশ্ন করুন। অথবা 🎤 মাইক আইকনে ক্লিক করে মুখে বলুন। উদাহরণ: "serendipity এর অর্থ কী?"</div></div>
   <div class="chat-input">
     <input type="text" id="chatInput" placeholder="আপনার প্রশ্ন..." />
+    <button class="mic-btn" id="chatMicBtn" title="মুখে বলুন">🎤</button>
     <button id="sendBtn">পাঠান</button>
   </div>
 </div>
@@ -108,13 +113,10 @@
 
 <script>
 /* ============ App Inventor মোড চেনা ============ */
-// App Inventor-এর WebViewer-এ window.AppInventor থাকে। থাকলে মাইক/ভয়েস/রেকর্ডিং অ্যাপের কম্পোনেন্টে যাবে।
 const IN_APP = !!(window.AppInventor && window.AppInventor.setWebViewString);
-// অ্যাপের ভেতরে পেজ ছোট করে দেখানো (০.৮ = ৮০%; আরও ছোট চাইলে ০.৭, বড় চাইলে ০.৯ দিন)
 const APP_ZOOM = 0.8;
 if(IN_APP){ document.documentElement.style.zoom = APP_ZOOM; }
 
-// ডিবাগ লাইন: অ্যাপে ব্রিজ পাওয়া গেল কিনা দেখায় (কাজ করলে এই লাইন মুছে ফেলতে পারেন)
 function sendToApp(cmd){
   try { window.AppInventor.setWebViewString(cmd); } catch(e){}
 }
@@ -142,24 +144,14 @@ function updateScoreboard(){
 
 /* ============ রিসেট মডাল ============ */
 const resetModal = document.getElementById('resetModal');
-document.getElementById('resetBtn').onclick = () => {
-  resetModal.classList.add('show');
-};
-document.getElementById('modalCancel').onclick = () => {
-  resetModal.classList.remove('show');
-};
+document.getElementById('resetBtn').onclick = () => { resetModal.classList.add('show'); };
+document.getElementById('modalCancel').onclick = () => { resetModal.classList.remove('show'); };
 document.getElementById('modalConfirm').onclick = () => {
   score = {correct:0, wrong:0, streak:0, bestStreak:0};
-  saveScore();
-  updateScoreboard();
-  resetModal.classList.remove('show');
+  saveScore(); updateScoreboard(); resetModal.classList.remove('show');
 };
-resetModal.addEventListener('click', (e) => {
-  if(e.target === resetModal) resetModal.classList.remove('show');
-});
-document.addEventListener('keydown', (e) => {
-  if(e.key === 'Escape') resetModal.classList.remove('show');
-});
+resetModal.addEventListener('click', (e) => { if(e.target === resetModal) resetModal.classList.remove('show'); });
+document.addEventListener('keydown', (e) => { if(e.key === 'Escape') resetModal.classList.remove('show'); });
 
 /* ============ এলিমেন্ট ============ */
 const card=document.getElementById('card'), enEl=document.getElementById('en'), pronEl=document.getElementById('pron'),
@@ -187,9 +179,8 @@ function similarity(a,b){
   return (2*m)/(wa.length+wb.length);
 }
 
-/* ============ ফলাফল যাচাই (ব্রাউজার ও App Inventor দুই জায়গা থেকেই কল হয়) ============ */
+/* ============ ফলাফল যাচাই ============ */
 function handleSaid(said){
-  // App Inventor-এর UriEncode স্পেসকে "+" বানায়, সেটা আবার স্পেস করা হচ্ছে
   said = String(said).replace(/\+/g, ' ');
   micBtn.textContent = "🎤 বলুন"; micBtn.classList.remove('recording');
   heardEl.textContent = 'আপনি বলেছেন: "'+said+'"';
@@ -206,19 +197,14 @@ function handleSaid(said){
   }
 }
 
-/* App Inventor থেকে কল হবে: ত্রুটি/কিছু শোনা না গেলে */
 function handleAppError(msg){
   micBtn.textContent = "🎤 বলুন"; micBtn.classList.remove('recording');
   statusEl.textContent = "⚠️ " + (msg || "কিছু শোনা যায়নি, আবার চেষ্টা করুন");
   statusEl.className = "status bad";
 }
+function handleAppStatus(msg){ statusEl.textContent = msg; statusEl.className = "status"; }
 
-/* App Inventor থেকে কল হবে: রেকর্ডিং প্লে শুরু হলে */
-function handleAppStatus(msg){
-  statusEl.textContent = msg; statusEl.className = "status";
-}
-
-/* ============ ভয়েস রিকগনিশন (ব্রাউজার মোড) ============ */
+/* ============ ভয়েস রিকগনিশন (ব্রাউজার) ============ */
 if(!IN_APP){
   if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window){
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -233,12 +219,10 @@ if(!IN_APP){
 /* ============ মাইক বাটন ============ */
 micBtn.onclick = ()=>{
   if(IN_APP){
-    card.classList.remove('correct','wrong');
-    heardEl.textContent = "";
+    card.classList.remove('correct','wrong'); heardEl.textContent = "";
     micBtn.textContent = "⏹️ শুনছি..."; micBtn.classList.add('recording');
     statusEl.textContent = "🎧 বলুন..."; statusEl.className = "status";
-    sendToApp("MIC");
-    return;
+    sendToApp("MIC"); return;
   }
   if(!recognition) return;
   if(isRecording) recognition.stop();
@@ -257,11 +241,7 @@ okBtn.onclick = ()=>{ currentIndex++; loadSentence(); };
 /* ============ আমার রেকর্ডিং শুনুন ============ */
 let mediaRecorder = null, audioChunks = [], lastRecordingURL = null;
 replayBtn.onclick = async ()=>{
-  if(IN_APP){
-    statusEl.textContent = "🎙️ ৩ সেকেন্ড বলুন..."; statusEl.className = "status";
-    sendToApp("REC");
-    return;
-  }
+  if(IN_APP){ statusEl.textContent = "🎙️ ৩ সেকেন্ড বলুন..."; statusEl.className = "status"; sendToApp("REC"); return; }
   if(lastRecordingURL){
     const audio = new Audio(lastRecordingURL);
     const s = sentences[currentIndex % sentences.length];
@@ -307,9 +287,7 @@ async function lookupWord(word){
       return `【${m.partOfSpeech}】${def}${ex}`;
     }).join("\n\n") || "কোনো সংজ্ঞা পাওয়া যায়নি";
     return `"${entry.word}" ${phonetic}\n\n${meanings}`;
-  } catch(e) {
-    return `অনলাইন অভিধান সংযোগ ব্যর্থ: ${e.message}`;
-  }
+  } catch(e) { return `অনলাইন অভিধান সংযোগ ব্যর্থ: ${e.message}`; }
 }
 
 /* ============ বাংলা অনুবাদ ============ */
@@ -324,13 +302,12 @@ async function translateToBangla(text){
       return translated || null;
     }
     return null;
-  } catch(e) {
-    return null;
-  }
+  } catch(e) { return null; }
 }
 
 /* ============ এজেন্ট ============ */
 const chatBox=document.getElementById('chatBox'), chatInput=document.getElementById('chatInput'), sendBtn=document.getElementById('sendBtn');
+const chatMicBtn=document.getElementById('chatMicBtn');
 function addMsg(t,w){ const d=document.createElement('div'); d.className='msg '+w; d.textContent=t; chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight; }
 function addLoading(){
   const d=document.createElement('div'); d.className='msg bot'; d.id='loadingMsg';
@@ -373,10 +350,7 @@ async function reply(q){
         }
       }
       removeLoading();
-
-      if(bnTranslation){
-        return dictResult + `\n\n🇧🇩 বাংলা অনুবাদ: ${bnTranslation}`;
-      }
+      if(bnTranslation) return dictResult + `\n\n🇧🇩 বাংলা অনুবাদ: ${bnTranslation}`;
       return dictResult;
     }
     return `বর্তমান বাক্য: ${cur.en}\nঅর্থ: ${cur.bn}\nউচ্চারণ: ${cur.pron}`;
@@ -388,7 +362,7 @@ async function reply(q){
   if(/ডেটা|বাক্য যোগ|dataset/.test(t)) return "manifest.json-এ ফাইলের নাম যোগ করুন। প্রতিটি ফাইল: [{en, pron, bn, words}]।";
   if(/ধন্যবাদ|thank/.test(t)) return "আপনাকেও ধন্যবাদ! অনুশীলন চালিয়ে যান 💪";
 
-  return "জিজ্ঞাসা করুন:\n• যেকোনো ইংরেজি শব্দের অর্থ ও বাংলা অনুবাদ\n• উচ্চারণ টিপস\n• গ্রামার\n• আপনার স্কোর";
+  return "জিজ্ঞাসা করুন:\n• যেকোনো ইংরেজি শব্দের অর্থ ও বাংলা অনুবাদ\n• উচ্চারণ টিপস\n• গ্রামার\n• আপনার স্কোর\n\nঅথবা 🎤 মাইক আইকনে ক্লিক করে মুখে বলুন।";
 }
 
 async function send(){
@@ -400,6 +374,58 @@ async function send(){
 sendBtn.onclick=send;
 chatInput.onkeypress=e=>{ if(e.key==='Enter') send(); };
 
+/* ============ এজেন্টের মাইক বাটন ============ */
+let chatRecognition = null;
+let chatIsRecording = false;
+
+function initChatVoice(){
+  if(IN_APP){
+    // App Inventor: মাইক চাপলে অ্যাপের Speech Recognizer চালু হবে
+    chatMicBtn.onclick = ()=>{
+      chatMicBtn.textContent = "⏹️";
+      chatMicBtn.classList.add('recording');
+      sendToApp("CHATMIC");
+    };
+    return;
+  }
+  if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window){
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    chatRecognition = new SR();
+    chatRecognition.lang = 'bn-BD'; // বাংলা ও ইংরেজি মিশিয়ে বলা যাবে
+    chatRecognition.interimResults = false;
+    chatRecognition.maxAlternatives = 1;
+    chatRecognition.onstart = ()=>{
+      chatIsRecording = true;
+      chatMicBtn.textContent = "⏹️";
+      chatMicBtn.classList.add('recording');
+    };
+    chatRecognition.onresult = (e)=>{
+      const text = e.results[0][0].transcript;
+      chatInput.value = text;
+      // স্বয়ংক্রিয়ভাবে পাঠিয়ে দিই
+      setTimeout(()=>send(), 150);
+    };
+    chatRecognition.onerror = ()=>{
+      chatMicBtn.textContent = "🎤";
+      chatMicBtn.classList.remove('recording');
+      chatIsRecording = false;
+    };
+    chatRecognition.onend = ()=>{
+      chatMicBtn.textContent = "🎤";
+      chatMicBtn.classList.remove('recording');
+      chatIsRecording = false;
+    };
+    chatMicBtn.onclick = ()=>{
+      if(chatIsRecording){ chatRecognition.stop(); }
+      else { try{ chatRecognition.start(); }catch(e){} }
+    };
+  } else {
+    chatMicBtn.disabled = true;
+    chatMicBtn.title = "এই ব্রাউজারে মাইক সাপোর্ট নেই";
+  }
+}
+initChatVoice();
+
 /* ============ শুরু: manifest.json থেকে সব ফাইল লোড ============ */
 updateScoreboard();
 enEl.textContent = "Loading...";
@@ -409,11 +435,9 @@ async function loadAllSentences(){
   try {
     const res = await fetch('manifest.json');
     if(res.ok) files = await res.json();
-  } catch(e) { /* manifest না থাকলে ডিফল্ট ব্যবহার */ }
+  } catch(e) { /* manifest না থাকলে ডিফল্ট */ }
 
-  if(!Array.isArray(files) || files.length === 0){
-    files = ['sentences.json'];
-  }
+  if(!Array.isArray(files) || files.length === 0){ files = ['sentences.json']; }
 
   const all = [];
   for(const file of files){
@@ -437,10 +461,7 @@ async function loadAllSentences(){
     } catch(e) { /* একটি ফাইল ব্যর্থ হলে বাকিগুলো চালিয়ে যান */ }
   }
 
-  if(all.length > 0){
-    sentences = all;
-    currentIndex = 0;
-  }
+  if(all.length > 0){ sentences = all; currentIndex = 0; }
   loadSentence();
   statusEl.textContent = all.length > 5
     ? `📚 ${all.length}টি বাক্য লোড হয়েছে (${files.length}টি ফাইল)`
