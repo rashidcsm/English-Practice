@@ -84,6 +84,7 @@
   </div>
   <div class="status" id="status"></div>
   <div class="heard" id="heard"></div>
+  <div class="heard" id="dbg" style="color:#0f766e;"></div>
 </div>
 
 <div class="agent">
@@ -109,6 +110,21 @@
 </div>
 
 <script>
+/* ============ App Inventor মোড চেনা ============ */
+// App Inventor-এর WebViewer-এ window.AppInventor থাকে। থাকলে মাইক/ভয়েস/রেকর্ডিং অ্যাপের কম্পোনেন্টে যাবে।
+const IN_APP = !!(window.AppInventor && window.AppInventor.setWebViewString);
+// ডিবাগ লাইন: অ্যাপে ব্রিজ পাওয়া গেল কিনা দেখায় (কাজ করলে এই লাইন মুছে ফেলতে পারেন)
+(function(){
+  const keys = Object.keys(window).filter(k => /android|bridge|webview|appinventor|custom|jsi|native/i.test(k));
+  document.getElementById('dbg').textContent =
+    "ডিবাগ → AppInventor: " + (window.AppInventor ? "আছে" : "নেই") +
+    " | মোড: " + (IN_APP ? "অ্যাপ" : "ব্রাউজার") +
+    " | অন্যান্য: " + (keys.join(", ") || "কিছু নেই");
+})();
+function sendToApp(cmd){
+  try { window.AppInventor.setWebViewString(cmd); } catch(e){}
+}
+
 /* ============ ডিফল্ট বাক্য ============ */
 let sentences = [
   { en:"I am learning English.", pron:"আই অ্যাম লার্নিং ইংলিশ", bn:"আমি ইংরেজি শিখছি।", words:{"learning":"শিখছি"} },
@@ -119,8 +135,9 @@ let sentences = [
 ];
 
 /* ============ স্কোর ============ */
-let score = JSON.parse(localStorage.getItem('engScore2') || '{"correct":0,"wrong":0,"streak":0,"bestStreak":0}');
-function saveScore(){ localStorage.setItem('engScore2', JSON.stringify(score)); }
+let score = {correct:0, wrong:0, streak:0, bestStreak:0};
+try { score = JSON.parse(localStorage.getItem('engScore2') || '{"correct":0,"wrong":0,"streak":0,"bestStreak":0}'); } catch(e){}
+function saveScore(){ try { localStorage.setItem('engScore2', JSON.stringify(score)); } catch(e){} }
 function updateScoreboard(){
   document.getElementById('statCorrect').textContent = score.correct;
   document.getElementById('statWrong').textContent = score.wrong;
@@ -176,27 +193,66 @@ function similarity(a,b){
   return (2*m)/(wa.length+wb.length);
 }
 
-/* ============ ভয়েস রিকগনিশন ============ */
-if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window){
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  recognition = new SR(); recognition.lang='en-US'; recognition.interimResults=false; recognition.maxAlternatives=1;
-  recognition.onstart = ()=>{ isRecording=true; micBtn.textContent="⏹️ শুনছি..."; micBtn.classList.add('recording'); statusEl.textContent="🎧 বলুন..."; statusEl.className="status"; };
-  recognition.onresult = (e)=>{
-    const said = e.results[0][0].transcript; heardEl.textContent = 'আপনি বলেছেন: "'+said+'"';
-    const target = sentences[currentIndex % sentences.length].en; const sc = similarity(said, target);
-    if(sc>=0.7){ card.classList.remove('wrong'); card.classList.add('correct'); statusEl.textContent="✅ সঠিক ("+Math.round(sc*100)+"%)"; statusEl.className="status good";
-      if(!hasScored){ score.correct++; score.streak++; if(score.streak>score.bestStreak) score.bestStreak=score.streak; hasScored=true; saveScore(); updateScoreboard(); } }
-    else { card.classList.remove('correct'); card.classList.add('wrong'); statusEl.textContent="❌ আবার চেষ্টা ("+Math.round(sc*100)+"%)"; statusEl.className="status bad";
-      if(!hasScored){ score.wrong++; score.streak=0; hasScored=true; saveScore(); updateScoreboard(); } }
-  };
-  recognition.onerror = (e)=>{ statusEl.textContent="⚠️ "+e.error; statusEl.className="status bad"; };
-  recognition.onend = ()=>{ isRecording=false; micBtn.textContent="🎤 বলুন"; micBtn.classList.remove('recording'); };
-} else { micBtn.disabled=true; micBtn.textContent="মাইক সাপোর্ট নেই"; }
+/* ============ ফলাফল যাচাই (ব্রাউজার ও App Inventor দুই জায়গা থেকেই কল হয়) ============ */
+function handleSaid(said){
+  micBtn.textContent = "🎤 বলুন"; micBtn.classList.remove('recording');
+  heardEl.textContent = 'আপনি বলেছেন: "'+said+'"';
+  const target = sentences[currentIndex % sentences.length].en;
+  const sc = similarity(said, target);
+  if(sc>=0.7){
+    card.classList.remove('wrong'); card.classList.add('correct');
+    statusEl.textContent="✅ সঠিক ("+Math.round(sc*100)+"%)"; statusEl.className="status good";
+    if(!hasScored){ score.correct++; score.streak++; if(score.streak>score.bestStreak) score.bestStreak=score.streak; hasScored=true; saveScore(); updateScoreboard(); }
+  } else {
+    card.classList.remove('correct'); card.classList.add('wrong');
+    statusEl.textContent="❌ আবার চেষ্টা ("+Math.round(sc*100)+"%)"; statusEl.className="status bad";
+    if(!hasScored){ score.wrong++; score.streak=0; hasScored=true; saveScore(); updateScoreboard(); }
+  }
+}
 
-micBtn.onclick = ()=>{ if(!recognition) return; if(isRecording) recognition.stop(); else { card.classList.remove('correct','wrong'); statusEl.textContent=""; try{recognition.start();}catch(e){} } };
+/* App Inventor থেকে কল হবে: ত্রুটি/কিছু শোনা না গেলে */
+function handleAppError(msg){
+  micBtn.textContent = "🎤 বলুন"; micBtn.classList.remove('recording');
+  statusEl.textContent = "⚠️ " + (msg || "কিছু শোনা যায়নি, আবার চেষ্টা করুন");
+  statusEl.className = "status bad";
+}
 
+/* App Inventor থেকে কল হবে: রেকর্ডিং প্লে শুরু হলে */
+function handleAppStatus(msg){
+  statusEl.textContent = msg; statusEl.className = "status";
+}
+
+/* ============ ভয়েস রিকগনিশন (ব্রাউজার মোড) ============ */
+if(!IN_APP){
+  if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window){
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SR(); recognition.lang='en-US'; recognition.interimResults=false; recognition.maxAlternatives=1;
+    recognition.onstart = ()=>{ isRecording=true; micBtn.textContent="⏹️ শুনছি..."; micBtn.classList.add('recording'); statusEl.textContent="🎧 বলুন..."; statusEl.className="status"; };
+    recognition.onresult = (e)=>{ handleSaid(e.results[0][0].transcript); };
+    recognition.onerror = (e)=>{ statusEl.textContent="⚠️ "+e.error; statusEl.className="status bad"; };
+    recognition.onend = ()=>{ isRecording=false; micBtn.textContent="🎤 বলুন"; micBtn.classList.remove('recording'); };
+  } else { micBtn.disabled=true; micBtn.textContent="মাইক সাপোর্ট নেই"; }
+}
+
+/* ============ মাইক বাটন ============ */
+micBtn.onclick = ()=>{
+  if(IN_APP){
+    card.classList.remove('correct','wrong');
+    heardEl.textContent = "";
+    micBtn.textContent = "⏹️ শুনছি..."; micBtn.classList.add('recording');
+    statusEl.textContent = "🎧 বলুন..."; statusEl.className = "status";
+    sendToApp("MIC");
+    return;
+  }
+  if(!recognition) return;
+  if(isRecording) recognition.stop();
+  else { card.classList.remove('correct','wrong'); statusEl.textContent=""; try{recognition.start();}catch(e){} }
+};
+
+/* ============ শুনুন বাটন ============ */
 speakBtn.onclick = ()=>{
   const s = sentences[currentIndex % sentences.length];
+  if(IN_APP){ sendToApp("SPEAK:" + s.en); return; }
   const u = new SpeechSynthesisUtterance(s.en); u.lang='en-US'; u.rate=0.9; speechSynthesis.cancel(); speechSynthesis.speak(u);
 };
 
@@ -205,6 +261,11 @@ okBtn.onclick = ()=>{ currentIndex++; loadSentence(); };
 /* ============ আমার রেকর্ডিং শুনুন ============ */
 let mediaRecorder = null, audioChunks = [], lastRecordingURL = null;
 replayBtn.onclick = async ()=>{
+  if(IN_APP){
+    statusEl.textContent = "🎙️ ৩ সেকেন্ড বলুন..."; statusEl.className = "status";
+    sendToApp("REC");
+    return;
+  }
   if(lastRecordingURL){
     const audio = new Audio(lastRecordingURL);
     const s = sentences[currentIndex % sentences.length];
