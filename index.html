@@ -25,10 +25,12 @@
   .status{margin-top:12px;font-size:15px;font-weight:600;min-height:22px;} .status.good{color:#16a34a;} .status.bad{color:#dc2626;}
   .heard{font-size:13px;color:#64748b;margin-top:6px;}
   .agent{width:100%;max-width:480px;background:#fff;border-radius:20px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.2);}
-  .agent h2{font-size:16px;color:#4c1d95;margin-bottom:10px;} .chat-box{max-height:180px;overflow-y:auto;margin-bottom:10px;}
+  .agent h2{font-size:16px;color:#4c1d95;margin-bottom:10px;} .chat-box{max-height:220px;overflow-y:auto;margin-bottom:10px;}
   .msg{padding:8px 12px;border-radius:10px;margin-bottom:6px;font-size:14px;line-height:1.5;white-space:pre-wrap;} .msg.user{background:#ede9fe;color:#4c1d95;text-align:right;} .msg.bot{background:#f1f5f9;color:#1e293b;}
   .chat-input{display:flex;gap:8px;} .chat-input input{flex:1;padding:10px;border:2px solid #ddd6fe;border-radius:10px;font-size:14px;outline:none;} .chat-input input:focus{border-color:#8b5cf6;}
   .chat-input button{flex:0 0 auto;background:#8b5cf6;color:#fff;min-width:auto;padding:10px 16px;}
+  .loading{display:inline-block;width:12px;height:12px;border:2px solid #c4b5fd;border-top-color:#8b5cf6;border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
 </style>
 </head>
 <body>
@@ -60,7 +62,7 @@
 
 <div class="agent">
   <h2>🤖 এআই এজেন্ট</h2>
-  <div class="chat-box" id="chatBox"><div class="msg bot">হ্যালো! উচ্চারণ, গ্রামার, শব্দের অর্থ বা স্কোর নিয়ে প্রশ্ন করুন।</div></div>
+  <div class="chat-box" id="chatBox"><div class="msg bot">হ্যালো! যেকোনো ইংরেজি শব্দের অর্থ ও বাংলা অনুবাদ জানতে প্রশ্ন করুন। উদাহরণ: "serendipity এর অর্থ কী?"</div></div>
   <div class="chat-input">
     <input type="text" id="chatInput" placeholder="আপনার প্রশ্ন..." />
     <button id="sendBtn">পাঠান</button>
@@ -68,7 +70,7 @@
 </div>
 
 <script>
-/* ============ বাক্য ডেটাবেস (বহিরাগত JSON দিয়ে প্রসারিত করা যায়) ============ */
+/* ============ বাক্য ডেটাবেস ============ */
 let sentences = [
   { en:"I am learning English.", pron:"আই অ্যাম লার্নিং ইংলিশ", bn:"আমি ইংরেজি শিখছি।", words:{"learning":"শিখছি"} },
   { en:"My name is Rahim.", pron:"মাই নেম ইজ রহিম", bn:"আমার নাম রহিম।", words:{"name":"নাম"} },
@@ -77,7 +79,6 @@ let sentences = [
   { en:"Thank you very much.", pron:"থ্যাংক ইউ ভেরি মাচ", bn:"অনেক ধন্যবাদ।", words:{"thank":"ধন্যবাদ"} }
 ];
 
-/* বহিরাগত JSON লোড করুন (আপনি নিজে URL পরিবর্তন করতে পারেন, অথবা নিচের ফাংশন কল করতে পারেন) */
 async function loadSentencesFromJSON(url) {
   try {
     const res = await fetch(url);
@@ -95,7 +96,6 @@ async function loadSentencesFromJSON(url) {
     }
   } catch(e) { alert("JSON লোড ব্যর্থ: " + e.message); }
 }
-/* ব্যবহার উদাহরণ: loadSentencesFromJSON('my-sentences.json'); */
 
 /* ============ স্কোর ============ */
 let score = JSON.parse(localStorage.getItem('engScore2') || '{"correct":0,"wrong":0,"streak":0,"bestStreak":0}');
@@ -163,7 +163,7 @@ speakBtn.onclick = ()=>{
 
 okBtn.onclick = ()=>{ currentIndex++; loadSentence(); };
 
-/* ============ আমার রেকর্ডিং শুনুন (MediaRecorder) ============ */
+/* ============ আমার রেকর্ডিং শুনুন ============ */
 let mediaRecorder = null, audioChunks = [], lastRecordingURL = null;
 replayBtn.onclick = async ()=>{
   if(lastRecordingURL){
@@ -197,20 +197,111 @@ replayBtn.onclick = async ()=>{
   } catch(e){ statusEl.textContent="মাইক অনুমতি দিন"; statusEl.className="status bad"; }
 };
 
-/* ============ এজেন্ট (সংক্ষিপ্ত) ============ */
+/* ============ অনলাইন অভিধান ============ */
+async function lookupWord(word){
+  try {
+    const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+    if(!res.ok) return `"${word}" এর অর্থ পাওয়া যায়নি। বানান ঠিক আছে কিনা দেখুন।`;
+    const data = await res.json();
+    const entry = data[0];
+    const phonetic = entry.phonetic || (entry.phonetics?.[0]?.text) || "";
+    const meanings = entry.meanings?.slice(0, 2).map(m => {
+      const def = m.definitions?.[0]?.definition || "";
+      const ex = m.definitions?.[0]?.example ? `\n   উদাহরণ: ${m.definitions[0].example}` : "";
+      return `【${m.partOfSpeech}】${def}${ex}`;
+    }).join("\n\n") || "কোনো সংজ্ঞা পাওয়া যায়নি";
+    return `"${entry.word}" ${phonetic}\n\n${meanings}`;
+  } catch(e) {
+    return `অনলাইন অভিধান সংযোগ ব্যর্থ: ${e.message}`;
+  }
+}
+
+/* ============ বাংলা অনুবাদ (MyMemory) ============ */
+async function translateToBangla(text){
+  try {
+    const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|bn`);
+    if(!res.ok) return null;
+    const data = await res.json();
+    if(data.responseStatus === 200 && data.responseData?.translatedText){
+      return data.responseData.translatedText;
+    }
+    return null;
+  } catch(e) {
+    return null;
+  }
+}
+
+/* ============ এজেন্ট ============ */
 const chatBox=document.getElementById('chatBox'), chatInput=document.getElementById('chatInput'), sendBtn=document.getElementById('sendBtn');
 function addMsg(t,w){ const d=document.createElement('div'); d.className='msg '+w; d.textContent=t; chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight; }
-function reply(q){
-  const t=q.toLowerCase(), cur=sentences[currentIndex % sentences.length];
-  if(/স্কোর|score/.test(t)){ const tot=score.correct+score.wrong; return `✅ ${score.correct} | ❌ ${score.wrong} | 🔥 ${score.streak} | 🎯 ${tot?Math.round(score.correct/tot*100):0}%`; }
-  if(/অর্থ|meaning|এই বাক্য/.test(t)) return `"${cur.en}"\nঅর্থ: ${cur.bn}\nউচ্চারণ: ${cur.pron}`;
+function addLoading(){
+  const d=document.createElement('div'); d.className='msg bot'; d.id='loadingMsg';
+  d.innerHTML = '<span class="loading"></span>খোঁজা হচ্ছে...';
+  chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight;
+}
+function removeLoading(){ const el=document.getElementById('loadingMsg'); if(el) el.remove(); }
+
+async function reply(q){
+  const t=q.toLowerCase().trim(), cur=sentences[currentIndex % sentences.length];
+
+  if(/স্কোর|score/.test(t)){
+    const tot=score.correct+score.wrong;
+    return `✅ সঠিক: ${score.correct}\n❌ ভুল: ${score.wrong}\n🔥 স্ট্রিক: ${score.streak}\n🏆 সর্বোচ্চ: ${score.bestStreak}\n🎯 নির্ভুলতা: ${tot?Math.round(score.correct/tot*100):0}%`;
+  }
+
+  if(/অর্থ|মানে|meaning|translate|শব্দ/.test(t)){
+    const curWords = cur.words || {};
+    for(const w in curWords){
+      if(t.includes(w.toLowerCase())) return `"${w}" শব্দের অর্থ: ${curWords[w]}\n\n(বর্তমান বাক্য: ${cur.en} → ${cur.bn})`;
+    }
+    for(const s of sentences){
+      const ws = s.words || {};
+      for(const w in ws){
+        if(t.includes(w.toLowerCase())) return `"${w}" শব্দের অর্থ: ${ws[w]}\n\nউদাহরণ: ${s.en} → ${s.bn}`;
+      }
+    }
+
+    const wordMatch = t.match(/([a-zA-Z]+)/);
+    if(wordMatch){
+      addLoading();
+      const dictResult = await lookupWord(wordMatch[1]);
+      // অভিধান থেকে ইংরেজি সংজ্ঞা পাওয়ার পর বাংলায় অনুবাদ
+      let bnTranslation = null;
+      if(!dictResult.includes("পাওয়া যায়নি") && !dictResult.includes("ব্যর্থ")){
+        const lines = dictResult.split('\n');
+        const defLine = lines.find(l => l.startsWith('【'));
+        if(defLine){
+          const englishDef = defLine.replace(/【[^】]+】/,'').trim();
+          bnTranslation = await translateToBangla(englishDef);
+        }
+      }
+      removeLoading();
+
+      if(bnTranslation){
+        return dictResult + `\n\n🇧🇩 বাংলা অনুবাদ: ${bnTranslation}`;
+      }
+      return dictResult;
+    }
+    return `বর্তমান বাক্য: ${cur.en}\nঅর্থ: ${cur.bn}\nউচ্চারণ: ${cur.pron}`;
+  }
+
   if(/উচ্চারণ|pronunciation/.test(t)) return "🔊 শুনে অনুকরণ করুন → 🎤 রেকর্ড করুন → 🎧 নিজের কণ্ঠ শুনুন। প্রতিদিন ১০ মিনিট।";
+  if(/গ্রামার|grammar/.test(t)) return "📚 প্রথমে Subject + Verb + Object গঠন শিখুন। এরপর ১২টি Tense অনুশীলন করুন। প্রতিদিন ১টি নিয়ম।";
   if(/ভুল|problem|কাজ করছে না/.test(t)) return "Chrome ব্যবহার করুন, মাইক অনুমতি দিন, ধীরে স্পষ্ট বলুন, ইন্টারনেট চেক করুন।";
   if(/ডেটা|বাক্য যোগ|dataset/.test(t)) return "একটি JSON ফাইল তৈরি করুন: [{en, pron, bn, words}]। তারপর loadSentencesFromJSON('ফাইলের-URL') কল করুন।";
-  return "জিজ্ঞাসা করুন: উচ্চারণ, গ্রামার, শব্দের অর্থ, স্কোর, বা ডেটাসেট কীভাবে বাড়াবেন।";
+  if(/ধন্যবাদ|thank/.test(t)) return "আপনাকেও ধন্যবাদ! অনুশীলন চালিয়ে যান 💪";
+
+  return "জিজ্ঞাসা করুন:\n• যেকোনো ইংরেজি শব্দের অর্থ ও বাংলা অনুবাদ (যেমন: serendipity এর অর্থ কী?)\n• উচ্চারণ টিপস\n• গ্রামার\n• আপনার স্কোর";
 }
-function send(){ const q=chatInput.value.trim(); if(!q) return; addMsg(q,'user'); chatInput.value=''; setTimeout(()=>addMsg(reply(q),'bot'),300); }
-sendBtn.onclick=send; chatInput.onkeypress=e=>{ if(e.key==='Enter') send(); };
+
+async function send(){
+  const q=chatInput.value.trim(); if(!q) return;
+  addMsg(q,'user'); chatInput.value='';
+  const ans = await reply(q);
+  addMsg(ans,'bot');
+}
+sendBtn.onclick=send;
+chatInput.onkeypress=e=>{ if(e.key==='Enter') send(); };
 
 /* ============ শুরু ============ */
 updateScoreboard(); loadSentence();
