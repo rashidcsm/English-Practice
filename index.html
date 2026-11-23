@@ -70,7 +70,7 @@
 </div>
 
 <script>
-/* ============ বাক্য ডেটাবেস ============ */
+/* ============ বাক্য ডেটাবেস (ডিফল্ট, sentences.json না থাকলে এটি ব্যবহার হবে) ============ */
 let sentences = [
   { en:"I am learning English.", pron:"আই অ্যাম লার্নিং ইংলিশ", bn:"আমি ইংরেজি শিখছি।", words:{"learning":"শিখছি"} },
   { en:"My name is Rahim.", pron:"মাই নেম ইজ রহিম", bn:"আমার নাম রহিম।", words:{"name":"নাম"} },
@@ -79,6 +79,7 @@ let sentences = [
   { en:"Thank you very much.", pron:"থ্যাংক ইউ ভেরি মাচ", bn:"অনেক ধন্যবাদ।", words:{"thank":"ধন্যবাদ"} }
 ];
 
+/* ম্যানুয়ালি অন্য JSON লোড করার ফাংশন (কনসোল থেকে ব্যবহারযোগ্য) */
 async function loadSentencesFromJSON(url) {
   try {
     const res = await fetch(url);
@@ -92,7 +93,8 @@ async function loadSentencesFromJSON(url) {
       })).filter(s => s.en);
       currentIndex = 0;
       loadSentence();
-      alert("লোড হয়েছে: " + sentences.length + "টি বাক্য");
+      statusEl.textContent = `📚 ${sentences.length}টি বাক্য লোড হয়েছে`;
+      statusEl.className = 'status';
     }
   } catch(e) { alert("JSON লোড ব্যর্থ: " + e.message); }
 }
@@ -216,14 +218,16 @@ async function lookupWord(word){
   }
 }
 
-/* ============ বাংলা অনুবাদ (MyMemory) ============ */
+/* ============ বাংলা অনুবাদ (Google অনানুষ্ঠানিক ইন্টারফেস) ============ */
 async function translateToBangla(text){
   try {
-    const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|bn`);
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=bn&dt=t&q=${encodeURIComponent(text)}`;
+    const res = await fetch(url);
     if(!res.ok) return null;
     const data = await res.json();
-    if(data.responseStatus === 200 && data.responseData?.translatedText){
-      return data.responseData.translatedText;
+    if(Array.isArray(data) && data[0] && Array.isArray(data[0])){
+      const translated = data[0].map(item => item[0]).filter(Boolean).join('');
+      return translated || null;
     }
     return null;
   } catch(e) {
@@ -265,7 +269,6 @@ async function reply(q){
     if(wordMatch){
       addLoading();
       const dictResult = await lookupWord(wordMatch[1]);
-      // অভিধান থেকে ইংরেজি সংজ্ঞা পাওয়ার পর বাংলায় অনুবাদ
       let bnTranslation = null;
       if(!dictResult.includes("পাওয়া যায়নি") && !dictResult.includes("ব্যর্থ")){
         const lines = dictResult.split('\n');
@@ -303,8 +306,35 @@ async function send(){
 sendBtn.onclick=send;
 chatInput.onkeypress=e=>{ if(e.key==='Enter') send(); };
 
-/* ============ শুরু ============ */
-updateScoreboard(); loadSentence();
+/* ============ শুরু: স্বয়ংক্রিয়ভাবে sentences.json লোড করার চেষ্টা ============ */
+updateScoreboard();
+enEl.textContent = "Loading...";
+
+fetch('sentences.json')
+  .then(r => r.ok ? r.json() : null)
+  .then(data => {
+    if (Array.isArray(data) && data.length) {
+      sentences = data.map(s => ({
+        en: s.en || s.english || "",
+        pron: s.pron || s.pronunciation || "",
+        bn: s.bn || s.bangla || "",
+        words: s.words || {}
+      })).filter(s => s.en);
+      currentIndex = 0;
+    }
+  })
+  .catch(() => { /* ফাইল না থাকলে চুপচাপ ডিফল্ট বাক্য ব্যবহার করুন */ })
+  .finally(() => {
+    loadSentence();
+    const count = sentences.length;
+    if (count > 5) {
+      statusEl.textContent = `📚 ${count}টি বাক্য লোড হয়েছে`;
+      statusEl.className = 'status';
+    } else {
+      statusEl.textContent = `📖 ডিফল্ট ${count}টি বাক্য (sentences.json পাওয়া যায়নি)`;
+      statusEl.className = 'status';
+    }
+  });
 </script>
 </body>
 </html>
