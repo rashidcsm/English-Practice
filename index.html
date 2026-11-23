@@ -70,7 +70,7 @@
 </div>
 
 <script>
-/* ============ বাক্য ডেটাবেস (ডিফল্ট, sentences.json না থাকলে এটি ব্যবহার হবে) ============ */
+/* ============ ডিফল্ট বাক্য (কোনো JSON না পাওয়া গেলে) ============ */
 let sentences = [
   { en:"I am learning English.", pron:"আই অ্যাম লার্নিং ইংলিশ", bn:"আমি ইংরেজি শিখছি।", words:{"learning":"শিখছি"} },
   { en:"My name is Rahim.", pron:"মাই নেম ইজ রহিম", bn:"আমার নাম রহিম।", words:{"name":"নাম"} },
@@ -78,26 +78,6 @@ let sentences = [
   { en:"I live in Bangladesh.", pron:"আই লিভ ইন বাংলাদেশ", bn:"আমি বাংলাদেশে থাকি।", words:{"live":"বাস করা"} },
   { en:"Thank you very much.", pron:"থ্যাংক ইউ ভেরি মাচ", bn:"অনেক ধন্যবাদ।", words:{"thank":"ধন্যবাদ"} }
 ];
-
-/* ম্যানুয়ালি অন্য JSON লোড করার ফাংশন (কনসোল থেকে ব্যবহারযোগ্য) */
-async function loadSentencesFromJSON(url) {
-  try {
-    const res = await fetch(url);
-    const data = await res.json();
-    if (Array.isArray(data) && data.length) {
-      sentences = data.map(s => ({
-        en: s.en || s.english || "",
-        pron: s.pron || s.pronunciation || "",
-        bn: s.bn || s.bangla || "",
-        words: s.words || {}
-      })).filter(s => s.en);
-      currentIndex = 0;
-      loadSentence();
-      statusEl.textContent = `📚 ${sentences.length}টি বাক্য লোড হয়েছে`;
-      statusEl.className = 'status';
-    }
-  } catch(e) { alert("JSON লোড ব্যর্থ: " + e.message); }
-}
 
 /* ============ স্কোর ============ */
 let score = JSON.parse(localStorage.getItem('engScore2') || '{"correct":0,"wrong":0,"streak":0,"bestStreak":0}');
@@ -291,10 +271,10 @@ async function reply(q){
   if(/উচ্চারণ|pronunciation/.test(t)) return "🔊 শুনে অনুকরণ করুন → 🎤 রেকর্ড করুন → 🎧 নিজের কণ্ঠ শুনুন। প্রতিদিন ১০ মিনিট।";
   if(/গ্রামার|grammar/.test(t)) return "📚 প্রথমে Subject + Verb + Object গঠন শিখুন। এরপর ১২টি Tense অনুশীলন করুন। প্রতিদিন ১টি নিয়ম।";
   if(/ভুল|problem|কাজ করছে না/.test(t)) return "Chrome ব্যবহার করুন, মাইক অনুমতি দিন, ধীরে স্পষ্ট বলুন, ইন্টারনেট চেক করুন।";
-  if(/ডেটা|বাক্য যোগ|dataset/.test(t)) return "একটি JSON ফাইল তৈরি করুন: [{en, pron, bn, words}]। তারপর loadSentencesFromJSON('ফাইলের-URL') কল করুন।";
+  if(/ডেটা|বাক্য যোগ|dataset/.test(t)) return "manifest.json-এ ফাইলের নাম যোগ করুন। প্রতিটি ফাইল: [{en, pron, bn, words}]।";
   if(/ধন্যবাদ|thank/.test(t)) return "আপনাকেও ধন্যবাদ! অনুশীলন চালিয়ে যান 💪";
 
-  return "জিজ্ঞাসা করুন:\n• যেকোনো ইংরেজি শব্দের অর্থ ও বাংলা অনুবাদ (যেমন: serendipity এর অর্থ কী?)\n• উচ্চারণ টিপস\n• গ্রামার\n• আপনার স্কোর";
+  return "জিজ্ঞাসা করুন:\n• যেকোনো ইংরেজি শব্দের অর্থ ও বাংলা অনুবাদ\n• উচ্চারণ টিপস\n• গ্রামার\n• আপনার স্কোর";
 }
 
 async function send(){
@@ -306,35 +286,55 @@ async function send(){
 sendBtn.onclick=send;
 chatInput.onkeypress=e=>{ if(e.key==='Enter') send(); };
 
-/* ============ শুরু: স্বয়ংক্রিয়ভাবে sentences.json লোড করার চেষ্টা ============ */
+/* ============ শুরু: manifest.json থেকে সব ফাইল লোড ============ */
 updateScoreboard();
 enEl.textContent = "Loading...";
 
-fetch('sentences.json')
-  .then(r => r.ok ? r.json() : null)
-  .then(data => {
-    if (Array.isArray(data) && data.length) {
-      sentences = data.map(s => ({
-        en: s.en || s.english || "",
-        pron: s.pron || s.pronunciation || "",
-        bn: s.bn || s.bangla || "",
-        words: s.words || {}
-      })).filter(s => s.en);
-      currentIndex = 0;
-    }
-  })
-  .catch(() => { /* ফাইল না থাকলে চুপচাপ ডিফল্ট বাক্য ব্যবহার করুন */ })
-  .finally(() => {
-    loadSentence();
-    const count = sentences.length;
-    if (count > 5) {
-      statusEl.textContent = `📚 ${count}টি বাক্য লোড হয়েছে`;
-      statusEl.className = 'status';
-    } else {
-      statusEl.textContent = `📖 ডিফল্ট ${count}টি বাক্য (sentences.json পাওয়া যায়নি)`;
-      statusEl.className = 'status';
-    }
-  });
+async function loadAllSentences(){
+  let files = [];
+  try {
+    const res = await fetch('manifest.json');
+    if(res.ok) files = await res.json();
+  } catch(e) { /* manifest না থাকলে ডিফল্ট ব্যবহার */ }
+
+  if(!Array.isArray(files) || files.length === 0){
+    files = ['sentences.json'];
+  }
+
+  const all = [];
+  for(const file of files){
+    try {
+      const r = await fetch(file);
+      if(!r.ok) continue;
+      const data = await r.json();
+      if(Array.isArray(data)){
+        data.forEach(s => {
+          const en = s.en || s.english || "";
+          if(en){
+            all.push({
+              en,
+              pron: s.pron || s.pronunciation || "",
+              bn: s.bn || s.bangla || "",
+              words: s.words || {}
+            });
+          }
+        });
+      }
+    } catch(e) { /* একটি ফাইল ব্যর্থ হলে বাকিগুলো চালিয়ে যান */ }
+  }
+
+  if(all.length > 0){
+    sentences = all;
+    currentIndex = 0;
+  }
+  loadSentence();
+  statusEl.textContent = all.length > 5
+    ? `📚 ${all.length}টি বাক্য লোড হয়েছে (${files.length}টি ফাইল)`
+    : `📖 ডিফল্ট ${sentences.length}টি বাক্য (JSON পাওয়া যায়নি)`;
+  statusEl.className = 'status';
+}
+
+loadAllSentences();
 </script>
 </body>
 </html>
