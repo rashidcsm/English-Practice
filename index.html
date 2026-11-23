@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ইংরেজি স্পিকিং প্র্যাকটিস</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI','Noto Sans Bengali',sans-serif; background: linear-gradient(135deg,#667eea,#764ba2); min-height:100vh; padding:16px; display:flex; flex-direction:column; align-items:center; }
+  h1 { color:#fff; font-size:20px; margin-bottom:12px; text-align:center; }
+  .scoreboard { width:100%; max-width:480px; background:rgba(255,255,255,.95); border-radius:16px; padding:12px; margin-bottom:12px; display:grid; grid-template-columns:repeat(4,1fr); gap:8px; box-shadow:0 6px 20px rgba(0,0,0,.15); }
+  .stat { text-align:center; } .stat .num { font-size:20px; font-weight:800; } .stat .lbl { font-size:11px; color:#64748b; }
+  .num.green{color:#16a34a;} .num.red{color:#dc2626;} .num.blue{color:#6366f1;} .num.orange{color:#f59e0b;}
+  .reset-btn { grid-column:1/-1; background:#e2e8f0; color:#475569; border:none; border-radius:10px; padding:6px; font-size:12px; font-weight:600; cursor:pointer; }
+  .card { background:#fff; border-radius:20px; padding:22px; width:100%; max-width:480px; box-shadow:0 10px 30px rgba(0,0,0,.25); border:4px solid #fff; transition:.3s; margin-bottom:14px; }
+  .card.correct{border-color:#22c55e;background:#f0fdf4;} .card.wrong{border-color:#ef4444;background:#fef2f2;}
+  .en-sentence{font-size:22px;font-weight:700;color:#1e293b;margin-bottom:10px;line-height:1.4;}
+  .pronunciation{font-size:15px;color:#7c3aed;margin-bottom:6px;font-style:italic;} .bangla{font-size:16px;color:#475569;margin-bottom:16px;}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;}
+  button{border:none;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:600;cursor:pointer;transition:.2s;flex:1;min-width:120px;}
+  .btn-mic{background:#6366f1;color:#fff;} .btn-mic.recording{background:#ef4444;animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.6;}}
+  .btn-ok{background:#22c55e;color:#fff;} .btn-speak{background:#f59e0b;color:#fff;} .btn-replay{background:#8b5cf6;color:#fff;}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  .status{margin-top:12px;font-size:15px;font-weight:600;min-height:22px;} .status.good{color:#16a34a;} .status.bad{color:#dc2626;}
+  .heard{font-size:13px;color:#64748b;margin-top:6px;}
+  .agent{width:100%;max-width:480px;background:#fff;border-radius:20px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.2);}
+  .agent h2{font-size:16px;color:#4c1d95;margin-bottom:10px;} .chat-box{max-height:180px;overflow-y:auto;margin-bottom:10px;}
+  .msg{padding:8px 12px;border-radius:10px;margin-bottom:6px;font-size:14px;line-height:1.5;white-space:pre-wrap;} .msg.user{background:#ede9fe;color:#4c1d95;text-align:right;} .msg.bot{background:#f1f5f9;color:#1e293b;}
+  .chat-input{display:flex;gap:8px;} .chat-input input{flex:1;padding:10px;border:2px solid #ddd6fe;border-radius:10px;font-size:14px;outline:none;} .chat-input input:focus{border-color:#8b5cf6;}
+  .chat-input button{flex:0 0 auto;background:#8b5cf6;color:#fff;min-width:auto;padding:10px 16px;}
+</style>
+</head>
+<body>
+<h1>🎯 ইংরেজি স্পিকিং প্র্যাকটিস</h1>
+
+<div class="scoreboard">
+  <div class="stat"><div class="num green" id="statCorrect">0</div><div class="lbl">সঠিক</div></div>
+  <div class="stat"><div class="num red" id="statWrong">0</div><div class="lbl">ভুল</div></div>
+  <div class="stat"><div class="num orange" id="statStreak">0</div><div class="lbl">স্ট্রিক</div></div>
+  <div class="stat"><div class="num blue" id="statAcc">0%</div><div class="lbl">নির্ভুলতা</div></div>
+  <button class="reset-btn" id="resetBtn">🔄 স্কোর রিসেট</button>
+</div>
+
+<div class="card" id="card">
+  <div class="en-sentence" id="en">Loading...</div>
+  <div class="pronunciation" id="pron">—</div>
+  <div class="bangla" id="bn">—</div>
+  <div class="controls">
+    <button class="btn-mic" id="micBtn">🎤 বলুন</button>
+    <button class="btn-speak" id="speakBtn">🔊 শুনুন</button>
+  </div>
+  <div class="controls" style="margin-top:10px;">
+    <button class="btn-replay" id="replayBtn">🎧 আমার রেকর্ডিং শুনুন</button>
+    <button class="btn-ok" id="okBtn">✅ পরের বাক্য</button>
+  </div>
+  <div class="status" id="status"></div>
+  <div class="heard" id="heard"></div>
+</div>
+
+<div class="agent">
+  <h2>🤖 এআই এজেন্ট</h2>
+  <div class="chat-box" id="chatBox"><div class="msg bot">হ্যালো! উচ্চারণ, গ্রামার, শব্দের অর্থ বা স্কোর নিয়ে প্রশ্ন করুন।</div></div>
+  <div class="chat-input">
+    <input type="text" id="chatInput" placeholder="আপনার প্রশ্ন..." />
+    <button id="sendBtn">পাঠান</button>
+  </div>
+</div>
+
+<script>
+/* ============ বাক্য ডেটাবেস (বহিরাগত JSON দিয়ে প্রসারিত করা যায়) ============ */
+let sentences = [
+  { en:"I am learning English.", pron:"আই অ্যাম লার্নিং ইংলিশ", bn:"আমি ইংরেজি শিখছি।", words:{"learning":"শিখছি"} },
+  { en:"My name is Rahim.", pron:"মাই নেম ইজ রহিম", bn:"আমার নাম রহিম।", words:{"name":"নাম"} },
+  { en:"How are you today?", pron:"হাউ আর ইউ টুডে", bn:"আজ কেমন আছেন?", words:{"today":"আজ"} },
+  { en:"I live in Bangladesh.", pron:"আই লিভ ইন বাংলাদেশ", bn:"আমি বাংলাদেশে থাকি।", words:{"live":"বাস করা"} },
+  { en:"Thank you very much.", pron:"থ্যাংক ইউ ভেরি মাচ", bn:"অনেক ধন্যবাদ।", words:{"thank":"ধন্যবাদ"} }
+];
+
+/* বহিরাগত JSON লোড করুন (আপনি নিজে URL পরিবর্তন করতে পারেন, অথবা নিচের ফাংশন কল করতে পারেন) */
+async function loadSentencesFromJSON(url) {
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (Array.isArray(data) && data.length) {
+      sentences = data.map(s => ({
+        en: s.en || s.english || "",
+        pron: s.pron || s.pronunciation || "",
+        bn: s.bn || s.bangla || "",
+        words: s.words || {}
+      })).filter(s => s.en);
+      currentIndex = 0;
+      loadSentence();
+      alert("লোড হয়েছে: " + sentences.length + "টি বাক্য");
+    }
+  } catch(e) { alert("JSON লোড ব্যর্থ: " + e.message); }
+}
+/* ব্যবহার উদাহরণ: loadSentencesFromJSON('my-sentences.json'); */
+
+/* ============ স্কোর ============ */
+let score = JSON.parse(localStorage.getItem('engScore2') || '{"correct":0,"wrong":0,"streak":0,"bestStreak":0}');
+function saveScore(){ localStorage.setItem('engScore2', JSON.stringify(score)); }
+function updateScoreboard(){
+  document.getElementById('statCorrect').textContent = score.correct;
+  document.getElementById('statWrong').textContent = score.wrong;
+  document.getElementById('statStreak').textContent = score.streak;
+  const total = score.correct + score.wrong;
+  document.getElementById('statAcc').textContent = (total ? Math.round(score.correct/total*100) : 0) + '%';
+}
+document.getElementById('resetBtn').onclick = () => {
+  if(confirm("স্কোর রিসেট করবেন?")){ score={correct:0,wrong:0,streak:0,bestStreak:0}; saveScore(); updateScoreboard(); }
+};
+
+/* ============ এলিমেন্ট ============ */
+const card=document.getElementById('card'), enEl=document.getElementById('en'), pronEl=document.getElementById('pron'),
+      bnEl=document.getElementById('bn'), micBtn=document.getElementById('micBtn'), speakBtn=document.getElementById('speakBtn'),
+      okBtn=document.getElementById('okBtn'), replayBtn=document.getElementById('replayBtn'),
+      statusEl=document.getElementById('status'), heardEl=document.getElementById('heard');
+
+let currentIndex = 0, hasScored = false, recognition = null, isRecording = false;
+
+/* ============ বাক্য দেখানো ============ */
+function loadSentence(){
+  const s = sentences[currentIndex % sentences.length];
+  enEl.textContent = s.en;
+  pronEl.textContent = "উচ্চারণ: " + (s.pron || "—");
+  bnEl.textContent = "অর্থ: " + (s.bn || "—");
+  card.classList.remove('correct','wrong'); statusEl.textContent=""; statusEl.className="status"; heardEl.textContent=""; hasScored=false;
+}
+
+/* ============ মিল ============ */
+function normalize(str){ return str.toLowerCase().replace(/[.,!?;:'"]/g,'').replace(/\s+/g,' ').trim(); }
+function similarity(a,b){
+  a=normalize(a); b=normalize(b); if(a===b) return 1;
+  const wa=a.split(' '), wb=b.split(' '); let m=0; const used=new Array(wb.length).fill(false);
+  for(const w of wa) for(let i=0;i<wb.length;i++){ if(!used[i]&&wb[i]===w){m++;used[i]=true;break;} }
+  return (2*m)/(wa.length+wb.length);
+}
+
+/* ============ ভয়েস রিকগনিশন ============ */
+if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SR(); recognition.lang='en-US'; recognition.interimResults=false; recognition.maxAlternatives=1;
+  recognition.onstart = ()=>{ isRecording=true; micBtn.textContent="⏹️ শুনছি..."; micBtn.classList.add('recording'); statusEl.textContent="🎧 বলুন..."; statusEl.className="status"; };
+  recognition.onresult = (e)=>{
+    const said = e.results[0][0].transcript; heardEl.textContent = 'আপনি বলেছেন: "'+said+'"';
+    const target = sentences[currentIndex % sentences.length].en; const sc = similarity(said, target);
+    if(sc>=0.7){ card.classList.remove('wrong'); card.classList.add('correct'); statusEl.textContent="✅ সঠিক ("+Math.round(sc*100)+"%)"; statusEl.className="status good";
+      if(!hasScored){ score.correct++; score.streak++; if(score.streak>score.bestStreak) score.bestStreak=score.streak; hasScored=true; saveScore(); updateScoreboard(); } }
+    else { card.classList.remove('correct'); card.classList.add('wrong'); statusEl.textContent="❌ আবার চেষ্টা ("+Math.round(sc*100)+"%)"; statusEl.className="status bad";
+      if(!hasScored){ score.wrong++; score.streak=0; hasScored=true; saveScore(); updateScoreboard(); } }
+  };
+  recognition.onerror = (e)=>{ statusEl.textContent="⚠️ "+e.error; statusEl.className="status bad"; };
+  recognition.onend = ()=>{ isRecording=false; micBtn.textContent="🎤 বলুন"; micBtn.classList.remove('recording'); };
+} else { micBtn.disabled=true; micBtn.textContent="মাইক সাপোর্ট নেই"; }
+
+micBtn.onclick = ()=>{ if(!recognition) return; if(isRecording) recognition.stop(); else { card.classList.remove('correct','wrong'); statusEl.textContent=""; try{recognition.start();}catch(e){} } };
+
+speakBtn.onclick = ()=>{
+  const s = sentences[currentIndex % sentences.length];
+  const u = new SpeechSynthesisUtterance(s.en); u.lang='en-US'; u.rate=0.9; speechSynthesis.cancel(); speechSynthesis.speak(u);
+};
+
+okBtn.onclick = ()=>{ currentIndex++; loadSentence(); };
+
+/* ============ আমার রেকর্ডিং শুনুন (MediaRecorder) ============ */
+let mediaRecorder = null, audioChunks = [], lastRecordingURL = null;
+replayBtn.onclick = async ()=>{
+  if(lastRecordingURL){
+    const audio = new Audio(lastRecordingURL);
+    const s = sentences[currentIndex % sentences.length];
+    const ref = new SpeechSynthesisUtterance(s.en); ref.lang='en-US'; ref.rate=0.9;
+    speechSynthesis.cancel(); speechSynthesis.speak(ref);
+    await new Promise(r=>{ ref.onend=r; setTimeout(r,2000); });
+    setTimeout(()=>{ audio.play(); }, 400);
+    statusEl.textContent = "🔊 আদর্শ → আপনার কণ্ঠ তুলনা করুন"; statusEl.className="status";
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    mediaRecorder = new MediaRecorder(stream); audioChunks = [];
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = ()=>{
+      const blob = new Blob(audioChunks, {type:'audio/webm'});
+      lastRecordingURL = URL.createObjectURL(blob);
+      const audio = new Audio(lastRecordingURL);
+      const s = sentences[currentIndex % sentences.length];
+      const ref = new SpeechSynthesisUtterance(s.en); ref.lang='en-US'; ref.rate=0.9;
+      speechSynthesis.cancel(); speechSynthesis.speak(ref);
+      ref.onend = ()=>{ setTimeout(()=>{ audio.play(); }, 400); };
+      stream.getTracks().forEach(t=>t.stop());
+      statusEl.textContent = "🔊 আদর্শ → আপনার কণ্ঠ"; statusEl.className="status";
+    };
+    mediaRecorder.start();
+    statusEl.textContent = "🎙️ ৩ সেকেন্ড বলুন..."; statusEl.className="status";
+    setTimeout(()=>{ if(mediaRecorder.state==='recording') mediaRecorder.stop(); }, 3500);
+  } catch(e){ statusEl.textContent="মাইক অনুমতি দিন"; statusEl.className="status bad"; }
+};
+
+/* ============ এজেন্ট (সংক্ষিপ্ত) ============ */
+const chatBox=document.getElementById('chatBox'), chatInput=document.getElementById('chatInput'), sendBtn=document.getElementById('sendBtn');
+function addMsg(t,w){ const d=document.createElement('div'); d.className='msg '+w; d.textContent=t; chatBox.appendChild(d); chatBox.scrollTop=chatBox.scrollHeight; }
+function reply(q){
+  const t=q.toLowerCase(), cur=sentences[currentIndex % sentences.length];
+  if(/স্কোর|score/.test(t)){ const tot=score.correct+score.wrong; return `✅ ${score.correct} | ❌ ${score.wrong} | 🔥 ${score.streak} | 🎯 ${tot?Math.round(score.correct/tot*100):0}%`; }
+  if(/অর্থ|meaning|এই বাক্য/.test(t)) return `"${cur.en}"\nঅর্থ: ${cur.bn}\nউচ্চারণ: ${cur.pron}`;
+  if(/উচ্চারণ|pronunciation/.test(t)) return "🔊 শুনে অনুকরণ করুন → 🎤 রেকর্ড করুন → 🎧 নিজের কণ্ঠ শুনুন। প্রতিদিন ১০ মিনিট।";
+  if(/ভুল|problem|কাজ করছে না/.test(t)) return "Chrome ব্যবহার করুন, মাইক অনুমতি দিন, ধীরে স্পষ্ট বলুন, ইন্টারনেট চেক করুন।";
+  if(/ডেটা|বাক্য যোগ|dataset/.test(t)) return "একটি JSON ফাইল তৈরি করুন: [{en, pron, bn, words}]। তারপর loadSentencesFromJSON('ফাইলের-URL') কল করুন।";
+  return "জিজ্ঞাসা করুন: উচ্চারণ, গ্রামার, শব্দের অর্থ, স্কোর, বা ডেটাসেট কীভাবে বাড়াবেন।";
+}
+function send(){ const q=chatInput.value.trim(); if(!q) return; addMsg(q,'user'); chatInput.value=''; setTimeout(()=>addMsg(reply(q),'bot'),300); }
+sendBtn.onclick=send; chatInput.onkeypress=e=>{ if(e.key==='Enter') send(); };
+
+/* ============ শুরু ============ */
+updateScoreboard(); loadSentence();
+</script>
+</body>
+</html>
