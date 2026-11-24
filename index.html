@@ -64,6 +64,7 @@
 </head>
 <body>
 <h1>🎯 ইংরেজি স্পিকিং প্র্যাকটিস</h1>
+<div id="loadInfo" style="color:rgba(255,255,255,.9);font-size:12px;margin:-6px 0 10px;text-align:center;"></div>
 
 <div class="scoreboard">
   <div class="stat"><div class="num green" id="statCorrect">0</div><div class="lbl">সঠিক</div></div>
@@ -174,6 +175,7 @@ const card=document.getElementById('card'), enEl=document.getElementById('en'), 
 
 let currentIndex = 0, hasScored = false, recognition = null, isRecording = false;
 let agentMode = false; // true হলে মাইকের ফল এআই এজেন্টের কাছে যাবে, বাক্য যাচাইয়ে নয়
+let agentTimer = null; // ১৫ সেকেন্ডে ফল না এলে এজেন্ট মোড নিজে থেকে বন্ধ হয়
 
 /* ============ বাক্য দেখানো ============ */
 function loadSentence(){
@@ -199,7 +201,7 @@ function handleSaid(said){
   said = String(said).replace(/\+/g, ' ');
   // এআই এজেন্টের মাইক চাপা থাকলে ফল প্রশ্ন হিসেবে পাঠানো হবে
   if(agentMode){
-    agentMode = false;
+    agentMode = false; clearTimeout(agentTimer);
     agentMicBtn.textContent = "🎤"; agentMicBtn.classList.remove('recording');
     chatInput.value = said;
     send();
@@ -253,6 +255,9 @@ if(!IN_APP){
 /* ============ মাইক বাটন ============ */
 micBtn.onclick = ()=>{
   if(IN_APP){
+    // উপরের মাইক চাপলে এজেন্ট মোড অবশ্যই বন্ধ, নইলে ফল এজেন্টের চ্যাটে চলে যায়
+    agentMode = false; clearTimeout(agentTimer);
+    agentMicBtn.textContent = "🎤"; agentMicBtn.classList.remove('recording');
     card.classList.remove('correct','wrong');
     heardEl.textContent = "";
     micBtn.textContent = "⏹️ শুনছি..."; micBtn.classList.add('recording');
@@ -471,6 +476,10 @@ agentMicBtn.onclick = ()=>{
     // অ্যাপে: একই "MIC" কমান্ড, তবে ফল এজেন্টে যাবে
     agentMode = true;
     agentMicBtn.textContent = "⏹️"; agentMicBtn.classList.add('recording');
+    clearTimeout(agentTimer);
+    agentTimer = setTimeout(()=>{
+      if(agentMode){ agentMode = false; agentMicBtn.textContent = "🎤"; agentMicBtn.classList.remove('recording'); }
+    }, 15000);
     sendToApp(agentLang === 'bn' ? "MICBN" : "MIC");
     return;
   }
@@ -529,10 +538,10 @@ async function loadAllSentences(){
     currentIndex = 0;
   }
   loadSentence();
-  statusEl.textContent = all.length > 5
+  // বাক্য সংখ্যা আলাদা জায়গায় দেখানো হয়, যাতে মাইকের ফলাফল এটা মুছে না দেয়
+  document.getElementById('loadInfo').textContent = all.length > 5
     ? `📚 ${all.length}টি বাক্য লোড হয়েছে (${files.length}টি ফাইল)`
     : `📖 ডিফল্ট ${sentences.length}টি বাক্য (JSON পাওয়া যায়নি)`;
-  statusEl.className = 'status';
 }
 
 loadAllSentences();
