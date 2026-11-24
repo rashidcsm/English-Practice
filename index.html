@@ -35,6 +35,26 @@
   .loading{display:inline-block;width:12px;height:12px;border:2px solid #c4b5fd;border-top-color:#8b5cf6;border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px;}
   @keyframes spin{to{transform:rotate(360deg);}}
 
+  .pos-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;}
+  .btn-list{flex:0 0 auto;min-width:auto;padding:6px 12px;font-size:13px;background:#0ea5e9;color:#fff;border-radius:10px;}
+
+  /* ===== সব বাক্যের তালিকা ===== */
+  .list-box{max-width:440px;max-height:85vh;display:flex;flex-direction:column;text-align:left;padding:16px;}
+  .list-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;}
+  .list-head .modal-title{margin:0;}
+  .list-head button{flex:0 0 auto;min-width:auto;padding:6px 12px;background:#e2e8f0;color:#475569;font-size:14px;}
+  #listSearch{width:100%;padding:10px;border:2px solid #ddd6fe;border-radius:10px;font-size:14px;outline:none;margin-bottom:6px;}
+  #listSearch:focus{border-color:#8b5cf6;}
+  .list-hint{font-size:12px;color:#64748b;margin-bottom:8px;}
+  .list-items{overflow-y:auto;flex:1;min-height:0;}
+  .list-item{display:flex;gap:10px;padding:8px 6px;border-bottom:1px solid #eef2f7;cursor:pointer;border-radius:8px;}
+  .list-item:hover{background:#f5f3ff;}
+  .list-item.current{background:#ede9fe;}
+  .list-item .no{flex:0 0 40px;font-weight:700;color:#6366f1;font-size:13px;}
+  .list-item .tx{font-size:14px;color:#1e293b;line-height:1.4;}
+  .list-item .tx small{display:block;color:#64748b;font-size:12px;}
+  .list-empty{padding:16px;text-align:center;color:#64748b;font-size:14px;}
+
   /* ===== মডাল ===== */
   .modal-overlay {
     display: none; position: fixed; inset: 0;
@@ -75,6 +95,10 @@
 </div>
 
 <div class="card" id="card">
+  <div class="pos-row">
+    <div class="heard" id="posInfo" style="margin:0;"></div>
+    <button class="btn-list" id="listBtn">📋 সব বাক্য</button>
+  </div>
   <div class="en-sentence" id="en">Loading...</div>
   <div class="pronunciation" id="pron">—</div>
   <div class="bangla" id="bn">—</div>
@@ -88,7 +112,7 @@
   </div>
   <div class="status" id="status"></div>
   <div class="heard" id="heard"></div>
-  
+</div>
 
 <div class="agent">
   <h2>🤖 এআই এজেন্ট</h2>
@@ -114,6 +138,19 @@
   </div>
 </div>
 
+<!-- সব বাক্যের তালিকা মডাল -->
+<div class="modal-overlay" id="listModal">
+  <div class="modal-box list-box">
+    <div class="list-head">
+      <div class="modal-title">📋 সব বাক্য (<span id="listCount">0</span>)</div>
+      <button id="listClose">✕</button>
+    </div>
+    <input type="text" id="listSearch" placeholder="খুঁজুন, অথবা নম্বর লিখুন (যেমন 106)" autocomplete="off" />
+    <div class="list-hint">কোনো বাক্যে ট্যাপ করলে সেখান থেকে শুরু হবে। নম্বর লিখে Enter চাপলেও যাওয়া যায়।</div>
+    <div class="list-items" id="listItems"></div>
+  </div>
+</div>
+
 <script>
 /* ============ App Inventor মোড চেনা ============ */
 // App Inventor-এর WebViewer-এ window.AppInventor থাকে। থাকলে মাইক/ভয়েস/রেকর্ডিং অ্যাপের কম্পোনেন্টে যাবে।
@@ -122,7 +159,6 @@ const IN_APP = !!(window.AppInventor && window.AppInventor.setWebViewString);
 const APP_ZOOM = 0.8;
 if(IN_APP){ document.documentElement.style.zoom = APP_ZOOM; }
 
-// ডিবাগ লাইন: অ্যাপে ব্রিজ পাওয়া গেল কিনা দেখায় (কাজ করলে এই লাইন মুছে ফেলতে পারেন)
 function sendToApp(cmd){
   try { window.AppInventor.setWebViewString(cmd); } catch(e){}
 }
@@ -173,15 +209,21 @@ document.addEventListener('keydown', (e) => {
 const card=document.getElementById('card'), enEl=document.getElementById('en'), pronEl=document.getElementById('pron'),
       bnEl=document.getElementById('bn'), micBtn=document.getElementById('micBtn'), speakBtn=document.getElementById('speakBtn'),
       okBtn=document.getElementById('okBtn'), replayBtn=document.getElementById('replayBtn'),
-      statusEl=document.getElementById('status'), heardEl=document.getElementById('heard');
+      statusEl=document.getElementById('status'), heardEl=document.getElementById('heard'),
+      posInfo=document.getElementById('posInfo');
 
 let currentIndex = 0, hasScored = false, recognition = null, isRecording = false;
 let agentMode = false; // true হলে মাইকের ফল এআই এজেন্টের কাছে যাবে, বাক্য যাচাইয়ে নয়
 let agentTimer = null; // ১৫ সেকেন্ডে ফল না এলে এজেন্ট মোড নিজে থেকে বন্ধ হয়
 
 /* ============ বাক্য দেখানো ============ */
+function idxKey(){ return 'engIndex_' + sentences.length; } // তালিকা বদলালে সংরক্ষিত জায়গা আপনাআপনি বাতিল হয়
+function saveIndex(){ try { localStorage.setItem(idxKey(), String(currentIndex)); } catch(e){} }
 function loadSentence(){
-  const s = sentences[currentIndex % sentences.length];
+  currentIndex = currentIndex % sentences.length;
+  saveIndex();
+  posInfo.textContent = "বাক্য " + (currentIndex + 1) + " / " + sentences.length;
+  const s = sentences[currentIndex];
   enEl.textContent = s.en;
   pronEl.textContent = "উচ্চারণ: " + (s.pron || "—");
   bnEl.textContent = "অর্থ: " + (s.bn || "—");
@@ -280,6 +322,71 @@ speakBtn.onclick = ()=>{
 };
 
 okBtn.onclick = ()=>{ currentIndex++; loadSentence(); };
+
+/* ============ সব বাক্যের তালিকা ও সার্চ ============ */
+const listModal = document.getElementById('listModal'), listItems = document.getElementById('listItems'),
+      listSearch = document.getElementById('listSearch'), listCount = document.getElementById('listCount');
+
+function renderList(query){
+  const q = query.trim().toLowerCase();
+  const isNum = /^\d+$/.test(q);
+  const frag = document.createDocumentFragment();
+  let shown = 0;
+  sentences.forEach((s, i)=>{
+    const no = i + 1;
+    if(q){
+      const hit = isNum
+        ? String(no).startsWith(q)
+        : (s.en.toLowerCase().includes(q) || (s.bn || '').toLowerCase().includes(q));
+      if(!hit) return;
+    }
+    const row = document.createElement('div');
+    row.className = 'list-item' + (i === currentIndex ? ' current' : '');
+    row.dataset.i = i;
+    const noEl = document.createElement('div'); noEl.className = 'no'; noEl.textContent = no;
+    const tx = document.createElement('div'); tx.className = 'tx'; tx.textContent = s.en;
+    if(s.bn){ const sm = document.createElement('small'); sm.textContent = s.bn; tx.appendChild(sm); }
+    row.appendChild(noEl); row.appendChild(tx);
+    frag.appendChild(row); shown++;
+  });
+  listItems.innerHTML = '';
+  if(!shown){
+    const e = document.createElement('div'); e.className = 'list-empty'; e.textContent = 'কিছু পাওয়া যায়নি'; listItems.appendChild(e);
+  } else listItems.appendChild(frag);
+}
+function openList(){
+  listSearch.value = '';
+  listCount.textContent = sentences.length;
+  renderList('');
+  listModal.classList.add('show');
+  setTimeout(()=>{ const c = listItems.querySelector('.current'); if(c) c.scrollIntoView({block:'center'}); }, 60);
+}
+function closeList(){ listModal.classList.remove('show'); }
+function startFrom(i){
+  currentIndex = i;
+  loadSentence();
+  closeList();
+}
+document.getElementById('listBtn').onclick = openList;
+document.getElementById('listClose').onclick = closeList;
+listModal.addEventListener('click', (e)=>{ if(e.target === listModal) closeList(); });
+listItems.addEventListener('click', (e)=>{
+  const row = e.target.closest('.list-item');
+  if(row) startFrom(parseInt(row.dataset.i, 10));
+});
+listSearch.addEventListener('input', ()=> renderList(listSearch.value));
+listSearch.addEventListener('keydown', (e)=>{
+  if(e.key !== 'Enter') return;
+  const v = listSearch.value.trim();
+  if(/^\d+$/.test(v)){
+    const n = parseInt(v, 10);
+    if(n >= 1 && n <= sentences.length) startFrom(n - 1);
+  } else {
+    const first = listItems.querySelector('.list-item');
+    if(first) startFrom(parseInt(first.dataset.i, 10));
+  }
+});
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeList(); });
 
 /* ============ আমার রেকর্ডিং শুনুন ============ */
 let mediaRecorder = null, audioChunks = [], lastRecordingURL = null;
@@ -535,10 +642,12 @@ async function loadAllSentences(){
     } catch(e) { /* একটি ফাইল ব্যর্থ হলে বাকিগুলো চালিয়ে যান */ }
   }
 
-  if(all.length > 0){
-    sentences = all;
-    currentIndex = 0;
-  }
+  if(all.length > 0){ sentences = all; }
+  // আগে যে বাক্য পর্যন্ত শিখেছিলেন, সেখান থেকে শুরু
+  try {
+    const saved = parseInt(localStorage.getItem(idxKey()) || '0', 10);
+    currentIndex = (saved >= 0 && saved < sentences.length) ? saved : 0;
+  } catch(e) { currentIndex = 0; }
   loadSentence();
   // বাক্য সংখ্যা আলাদা জায়গায় দেখানো হয়, যাতে মাইকের ফলাফল এটা মুছে না দেয়
   document.getElementById('loadInfo').textContent = all.length > 5
